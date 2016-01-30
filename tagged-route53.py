@@ -56,10 +56,11 @@ class Dns(object):
         instances = response['Reservations']
         instance_ids = []
         for instance in instances:
-            tags = instance['Instances'][0]['Tags']
-            for tag in tags:
-                if tag['Key'] == self.tag_instance_id:
-                    instance_ids.append(tag['Value'])
+            if instance['Instances'][0]['State']['Name'] == 'running':
+                tags = instance['Instances'][0]['Tags']
+                for tag in tags:
+                    if tag['Key'] == self.tag_instance_id:
+                        instance_ids.append(tag['Value'])
 
         # the current instance will be in the list, but as we want to start at 1, that's good
         self.instance_count = len(instances)
