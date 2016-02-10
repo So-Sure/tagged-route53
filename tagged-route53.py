@@ -15,17 +15,24 @@ class Dns(object):
         self.instance_count = None
         self.hostname = None
         self.ip = None
+        self.use_public_ip = None
         self.domain = None
         self.tag_env = None
         self.tag_role = None
         self.tag_instance_id = None
+        self.name = None
 
     def current_instance(self):
         response = requests.get('http://169.254.169.254/latest/meta-data/instance-id')
         self.instance_id = response.text
         print 'Instance: %s' % (self.instance_id)
 
-    def current_ip(self):
+    def current_public_ip(self):
+        response = requests.get('http://169.254.169.254/latest/meta-data/public-ipv4')
+        self.ip = response.text
+        print 'IP: %s' % (self.ip)
+
+    def current_private_ip(self):
         response = requests.get('http://169.254.169.254/latest/meta-data/local-ipv4')
         self.ip = response.text
         print 'IP: %s' % (self.ip)
@@ -81,14 +88,22 @@ class Dns(object):
     def get_hostname(self):
         if self.instance_count is None:
             self.get_instance_count()
-        self.hostname = '%s-%d.%s.%s' % (self.role, self.instance_count, self.env, self.domain)
+            
+        if self.name is None:
+            self.hostname = '%s-%d.%s.%s' % (self.role, self.instance_count, self.env, self.domain)
+        else:
+            self.hostname = "%s.%s" % (self.name, self.domain)
+
         print 'Hostname: %s' % (self.hostname)
 
     def update_dns(self):
         if self.hostname is None:
             self.get_hostname()
         if self.ip is None:
-            self.current_ip()
+            if self.use_public_ip:
+                self.current_public_ip()
+            else:
+                self.current_private_ip()
 
         response = self.dns_client.list_hosted_zones_by_name(
             DNSName=self.domain
@@ -122,12 +137,16 @@ class Dns(object):
         parser.add_argument('--tag-role', default='role', help='Role tag name (default: %(default)s)')
         parser.add_argument('--tag-env', default='env', help='Environment tag name (default: %(default)s)')
         parser.add_argument('--tag-instance-id', default='instance-id', help='Instance Id tag name (default: %(default)s)')
+        parser.add_argument('--public-ip', action='store_true', default=False, help='Use public ip instead of private ip')
+        parser.add_argument('--name', default=None, help='Ignore tags and just set name')
         args = parser.parse_args()
         
         self.domain = args.domain
         self.tag_env = args.tag_env
         self.tag_role = args.tag_role
         self.tag_instance_id = args.tag_instance_id
+        self.name = args.name
+        self.use_public_ip = args.public_ip
 
         self.update_dns()
 
