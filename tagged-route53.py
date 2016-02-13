@@ -17,6 +17,7 @@ class Dns(object):
         self.ip = None
         self.use_public_ip = None
         self.domain = None
+        self.set_tag_name = True
         self.tag_env = None
         self.tag_role = None
         self.tag_instance_id = None
@@ -85,6 +86,14 @@ class Dns(object):
             Tags=[{'Key': self.tag_instance_id, 'Value': str(self.instance_count) }]
         )
 
+        if self.set_tag_name:
+            name = '%s-%s-%d' % (self.env, self.role, self.instance_count)
+            print 'Setting instance name: %s' % (name)
+            self.ec2_client.create_tags(
+                Resources=[self.instance_id],
+                Tags=[{'Key': 'Name', 'Value': name }]
+            )
+
     def get_hostname(self):
         if self.instance_count is None:
             self.get_instance_count()
@@ -134,14 +143,16 @@ class Dns(object):
     def main(self):
         parser = argparse.ArgumentParser(description='Update route 53 dns based on server tags')
         parser.add_argument('domain', help='Domain name')
+        parser.add_argument('--skip-tag-name', action='store_true', default=False, help='Skip setting the tag name')
         parser.add_argument('--tag-role', default='role', help='Role tag name (default: %(default)s)')
         parser.add_argument('--tag-env', default='env', help='Environment tag name (default: %(default)s)')
         parser.add_argument('--tag-instance-id', default='instance-id', help='Instance Id tag name (default: %(default)s)')
         parser.add_argument('--public-ip', action='store_true', default=False, help='Use public ip instead of private ip')
         parser.add_argument('--name', default=None, help='Ignore tags and just set name')
         args = parser.parse_args()
-        
+
         self.domain = args.domain
+        self.set_tag_name = not args.skip_tag_name
         self.tag_env = args.tag_env
         self.tag_role = args.tag_role
         self.tag_instance_id = args.tag_instance_id
