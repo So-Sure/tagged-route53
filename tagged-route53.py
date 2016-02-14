@@ -12,7 +12,7 @@ class Dns(object):
         self.role = None
         self.env = None
         self.instance_id = None
-        self.instance_ids = None
+        self.instances = None
         self.indexes = None
         self.instance_count = None
         self.hostname = None
@@ -24,6 +24,7 @@ class Dns(object):
         self.tag_role = None
         self.tag_index = None
         self.name = None
+        self.update_dns = True
 
     def current_instance(self):
         response = requests.get('http://169.254.169.254/latest/meta-data/instance-id')
@@ -68,23 +69,32 @@ class Dns(object):
         instances = response['Reservations']
 
         print 'Checking tags'
-        self.instance_ids = []
+        self.instances = {}
         self.indexes = []
         for instance in instances:
+            index = -1
             if instance['Instances'][0]['State']['Name'] == 'running':
-                self.instance_ids.append(instance['Instances'][0]['InstanceId'])
+                instance_id = instance['Instances'][0]['InstanceId']
                 tags = instance['Instances'][0]['Tags']
                 for tag in tags:
                     if tag['Key'] == self.tag_index:
-                        self.indexes.append(tag['Value'])
+                        index = tag['Value']                
+                        self.indexes.append(index)
+                self.instances[instance_id] = int(index)
 
     def get_instance_count(self):
-        if self.instance_ids is None:
+        if self.instances is None:
             self.get_instance_ids()
 
         # the current instance will be in the list, but as we want to start at 1, that's good
-        self.instance_count = len(self.instance_ids)
+        self.instance_count = len(self.instances)
         print 'Instance count: %d' % (self.instance_count)
+
+        if self.instances.has_key(self.instance_id) and self.instances[self.instance_id] >= 0:
+            self.instance_count = self.instances[self.instance_id]
+            print 'Index is already set %s' % (self.instance_count)
+            self.update_dns = False
+            return
 
         if self.instance_count < 1:
             raise Exception('Instance count must be 1 or more')
@@ -92,12 +102,12 @@ class Dns(object):
         print self.indexes
 
         # May be replacing a previous server
-        for i in range(1, self.instance_count + 1):
+        for i in range(1, self.instance_count + 2):
             if str(i) not in self.indexes:
                 self.instance_count = i
                 break
 
-        print 'Using Instance id: %d' % (self.instance_count)
+        print 'Using index: %d' % (self.instance_count)
         self.ec2_client.create_tags(
             Resources=[self.instance_id],
             Tags=[{'Key': self.tag_index, 'Value': str(self.instance_count) }]
@@ -114,7 +124,7 @@ class Dns(object):
     def get_hostname(self):
         if self.instance_count is None:
             self.get_instance_count()
-            
+
         if self.name is None:
             self.hostname = '%s-%d.%s.%s' % (self.role, self.instance_count, self.env, self.domain)
         else:
@@ -122,21 +132,29 @@ class Dns(object):
 
         print 'Hostname: %s' % (self.hostname)
 
-    def update_all(self):
+    def run_update_all(self):
         self.get_instance_ids()
-        print instance_ids
-        for instance_id in self.instance_ids:
+        print self.instances
+        for instance_id in self.instances.keys():
             print 'Updating instance %s' % (instance_id)
             self.instance_id = instance_id
-            self.update_dns()
+            self.run_update_dns()
+
             self.indexes.append(str(self.instance_count))
+
             self.hostname = None
             self.ip = None
             self.instance_count = None
+            self.update_dns = True
 
-    def update_dns(self):
+    def run_update_dns(self):
         if self.hostname is None:
             self.get_hostname()
+
+        if not self.update_dns:
+            print 'Skipping dns update as server already exists'
+            return
+
         if self.ip is None:
             if self.use_public_ip:
                 self.current_public_ip()
@@ -196,9 +214,9 @@ class Dns(object):
         self.instance_id = args.instance_id
 
         if args.all_tags:
-            self.update_all()
+            self.run_update_all()
         else:
-            self.update_dns()
+            self.run_update_dns()
 
 if __name__ == '__main__':
 
