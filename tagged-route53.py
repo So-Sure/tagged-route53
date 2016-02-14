@@ -29,13 +29,15 @@ class Dns(object):
         print 'Instance: %s' % (self.instance_id)
 
     def current_public_ip(self):
-        response = requests.get('http://169.254.169.254/latest/meta-data/public-ipv4')
-        self.ip = response.text
+        response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
+        instances = response['Reservations']
+        self.ip = instances[0]['Instances'][0]['PublicIpAddress']
         print 'IP: %s' % (self.ip)
 
     def current_private_ip(self):
-        response = requests.get('http://169.254.169.254/latest/meta-data/local-ipv4')
-        self.ip = response.text
+        response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
+        instances = response['Reservations']
+        self.ip = instances[0]['Instances'][0]['PrivateIpAddress']
         print 'IP: %s' % (self.ip)
 
     def current_role_env(self):
@@ -149,6 +151,7 @@ class Dns(object):
         parser.add_argument('--tag-instance-id', default='instance-id', help='Instance Id tag name (default: %(default)s)')
         parser.add_argument('--public-ip', action='store_true', default=False, help='Use public ip instead of private ip')
         parser.add_argument('--name', default=None, help='Ignore tags and just set name')
+        parser.add_argument('--instance-id', default=None, help='If given, use instance id given rather than local instance')
         args = parser.parse_args()
 
         self.domain = args.domain
@@ -158,6 +161,7 @@ class Dns(object):
         self.tag_instance_id = args.tag_instance_id
         self.name = args.name
         self.use_public_ip = args.public_ip
+        self.instance_id = args.instance_id
 
         self.update_dns()
 
