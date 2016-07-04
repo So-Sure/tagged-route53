@@ -20,28 +20,33 @@ class Dns(object):
         self.use_public_ip = None
         self.domain = None
         self.set_tag_name = True
+        self.set_dns_registration = True
         self.tag_env = None
         self.tag_role = None
         self.tag_index = None
         self.name = None
         self.update_dns = True
+        self.quiet = False
 
     def current_instance(self):
         response = requests.get('http://169.254.169.254/latest/meta-data/instance-id')
         self.instance_id = response.text
-        print 'Instance: %s' % (self.instance_id)
+        if not self.quiet:
+            print 'Instance: %s' % (self.instance_id)
 
     def current_public_ip(self):
         response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
         instances = response['Reservations']
         self.ip = instances[0]['Instances'][0]['PublicIpAddress']
-        print 'IP: %s' % (self.ip)
+        if not self.quiet:
+            print 'IP: %s' % (self.ip)
 
     def current_private_ip(self):
         response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
         instances = response['Reservations']
         self.ip = instances[0]['Instances'][0]['PrivateIpAddress']
-        print 'IP: %s' % (self.ip)
+        if not self.quiet:
+            print 'IP: %s' % (self.ip)
 
     def current_role_env(self):
         if self.instance_id is None:
@@ -56,7 +61,8 @@ class Dns(object):
             elif self.role is None and tag['Key'] == self.tag_role:
                 self.role = tag['Value']
 
-        print 'Env: %s Role: %s' % (self.env, self.role)
+        if not self.quiet:
+            print 'Env: %s Role: %s' % (self.env, self.role)
 
     def get_instance_ids(self):
         if self.env is None or self.role is None:
@@ -68,7 +74,8 @@ class Dns(object):
         response = self.ec2_client.describe_instances(Filters=filters)
         instances = response['Reservations']
 
-        print 'Checking tags'
+        if not self.quiet:
+            print 'Checking tags'
         self.instances = {}
         self.indexes = []
         for instance in instances:
@@ -88,18 +95,21 @@ class Dns(object):
 
         # the current instance will be in the list, but as we want to start at 1, that's good
         self.instance_count = len(self.instances)
-        print 'Instance count: %d' % (self.instance_count)
+        if not self.quiet:
+            print 'Instance count: %d' % (self.instance_count)
 
         if self.instances.has_key(self.instance_id) and self.instances[self.instance_id] >= 0:
             self.instance_count = self.instances[self.instance_id]
-            print 'Index is already set %s' % (self.instance_count)
+            if not self.quiet:
+                print 'Index is already set %s' % (self.instance_count)
             self.update_dns = False
             return
 
         if self.instance_count < 1:
             raise Exception('Instance count must be 1 or more')
 
-        print self.indexes
+        if not self.quiet:
+            print self.indexes
 
         # May be replacing a previous server
         for i in range(1, self.instance_count + 2):
@@ -107,7 +117,8 @@ class Dns(object):
                 self.instance_count = i
                 break
 
-        print 'Using index: %d' % (self.instance_count)
+        if not self.quiet:
+            print 'Using index: %d' % (self.instance_count)
         self.ec2_client.create_tags(
             Resources=[self.instance_id],
             Tags=[{'Key': self.tag_index, 'Value': str(self.instance_count) }]
@@ -115,7 +126,8 @@ class Dns(object):
 
         if self.set_tag_name:
             name = '%s-%s-%d' % (self.env, self.role, self.instance_count)
-            print 'Setting instance name: %s' % (name)
+            if not self.quiet:
+                print 'Setting instance name: %s' % (name)
             self.ec2_client.create_tags(
                 Resources=[self.instance_id],
                 Tags=[{'Key': 'Name', 'Value': name }]
@@ -130,13 +142,18 @@ class Dns(object):
         else:
             self.hostname = "%s.%s" % (self.name, self.domain)
 
-        print 'Hostname: %s' % (self.hostname)
+        if not self.quiet:
+            print 'Hostname: %s' % (self.hostname)
+        else:
+            print self.hostname
 
     def run_update_all(self):
         self.get_instance_ids()
-        print self.instances
+        if not self.quiet:
+            print self.instances
         for instance_id in self.instances.keys():
-            print 'Updating instance %s' % (instance_id)
+            if not self.quiet:
+                print 'Updating instance %s' % (instance_id)
             self.instance_id = instance_id
             self.run_update_dns()
 
@@ -152,7 +169,13 @@ class Dns(object):
             self.get_hostname()
 
         if not self.update_dns:
-            print 'Skipping dns update as server already exists'
+            if not self.quiet:
+                print 'Skipping dns update as server already exists'
+            return
+
+        if not self.set_dns_registration:
+            if not self.quiet:
+                print 'Skipping dns registration as per request'
             return
 
         if self.ip is None:
@@ -185,12 +208,15 @@ class Dns(object):
                 ]
             }
         )
-        print response
+        if not self.quiet:
+            print response
 
     def main(self):
         parser = argparse.ArgumentParser(description='Update route 53 dns based on server tags')
         parser.add_argument('domain', help='Domain name')
         parser.add_argument('--skip-tag-name', action='store_true', default=False, help='Skip setting the tag name')
+        parser.add_argument('--skip-dns-registration', action='store_true', default=False, help='If set, only display the dns entry and do run any dns updates')
+        parser.add_argument('--quiet', action='store_true', default=False, help='If set, only output the hostname')
         parser.add_argument('--tag-role', default='role', help='Role tag name (default: %(default)s)')
         parser.add_argument('--tag-env', default='env', help='Environment tag name (default: %(default)s)')
         parser.add_argument('--tag-index', default='index', help='Index tag name (default: %(default)s)')
@@ -204,6 +230,8 @@ class Dns(object):
 
         self.domain = args.domain
         self.set_tag_name = not args.skip_tag_name
+        self.set_dns_registration = not args.skip_dns_registration
+        self.quiet = args.quiet
         self.tag_env = args.tag_env
         self.tag_role = args.tag_role
         self.role = args.role
