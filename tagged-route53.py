@@ -21,6 +21,7 @@ class Dns(object):
         self.domain = None
         self.set_tag_name = True
         self.set_dns_registration = True
+        self.force_dns_registration = False
         self.tag_env = None
         self.tag_role = None
         self.tag_index = None
@@ -168,7 +169,7 @@ class Dns(object):
         if self.hostname is None:
             self.get_hostname()
 
-        if not self.update_dns:
+        if not self.update_dns and not self.force_dns_registration:
             if not self.quiet:
                 print 'Skipping dns update as server already exists'
             return
@@ -216,6 +217,7 @@ class Dns(object):
         parser.add_argument('domain', help='Domain name')
         parser.add_argument('--skip-tag-name', action='store_true', default=False, help='Skip setting the tag name')
         parser.add_argument('--skip-dns-registration', action='store_true', default=False, help='If set, only display the dns entry and do run any dns updates')
+        parser.add_argument('--force-dns-registration', action='store_true', default=False, help='If set, only display the dns entry and do run any dns updates')
         parser.add_argument('--quiet', action='store_true', default=False, help='If set, only output the hostname')
         parser.add_argument('--tag-role', default='role', help='Role tag name (default: %(default)s)')
         parser.add_argument('--tag-env', default='env', help='Environment tag name (default: %(default)s)')
@@ -231,6 +233,7 @@ class Dns(object):
         self.domain = args.domain
         self.set_tag_name = not args.skip_tag_name
         self.set_dns_registration = not args.skip_dns_registration
+        self.force_dns_registration = args.force_dns_registration
         self.quiet = args.quiet
         self.tag_env = args.tag_env
         self.tag_role = args.tag_role
