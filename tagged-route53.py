@@ -28,6 +28,7 @@ class Dns(object):
         self.name = None
         self.update_dns = True
         self.quiet = False
+        self.update_index = True
 
     def current_instance(self):
         response = requests.get('http://169.254.169.254/latest/meta-data/instance-id')
@@ -104,7 +105,7 @@ class Dns(object):
             if not self.quiet:
                 print 'Index is already set %s' % (self.instance_count)
             self.update_dns = False
-            return
+            self.update_index = False
 
         if self.instance_count < 1:
             raise Exception('Instance count must be 1 or more')
@@ -112,18 +113,21 @@ class Dns(object):
         if not self.quiet:
             print self.indexes
 
-        # May be replacing a previous server
-        for i in range(1, self.instance_count + 2):
-            if str(i) not in self.indexes:
-                self.instance_count = i
-                break
-
+        if self.update_index:
+            # May be replacing a previous server
+            for i in range(1, self.instance_count + 2):
+                if str(i) not in self.indexes:
+                    self.instance_count = i
+                    break
+    
         if not self.quiet:
             print 'Using index: %d' % (self.instance_count)
-        self.ec2_client.create_tags(
-            Resources=[self.instance_id],
-            Tags=[{'Key': self.tag_index, 'Value': str(self.instance_count) }]
-        )
+            
+        if self.update_index:
+            self.ec2_client.create_tags(
+                Resources=[self.instance_id],
+                Tags=[{'Key': self.tag_index, 'Value': str(self.instance_count) }]
+            )
 
         if self.set_tag_name:
             name = '%s-%s-%d' % (self.env, self.role, self.instance_count)
