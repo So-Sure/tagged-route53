@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 import requests
 import boto3
 import argparse
@@ -34,21 +34,21 @@ class Dns(object):
         response = requests.get('http://169.254.169.254/latest/meta-data/instance-id')
         self.instance_id = response.text
         if not self.quiet:
-            print 'Instance: %s' % (self.instance_id)
+            print(f'Instance: {self.instance_id}')
 
     def current_public_ip(self):
         response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
         instances = response['Reservations']
         self.ip = instances[0]['Instances'][0]['PublicIpAddress']
         if not self.quiet:
-            print 'IP: %s' % (self.ip)
+            print(f'IP: {self.ip}')
 
     def current_private_ip(self):
         response = self.ec2_client.describe_instances(InstanceIds=[self.instance_id])
         instances = response['Reservations']
         self.ip = instances[0]['Instances'][0]['PrivateIpAddress']
         if not self.quiet:
-            print 'IP: %s' % (self.ip)
+            print(f'IP: {self.ip}')
 
     def current_role_env(self):
         if self.instance_id is None:
@@ -64,7 +64,7 @@ class Dns(object):
                 self.role = tag['Value']
 
         if not self.quiet:
-            print 'Env: %s Role: %s' % (self.env, self.role)
+            print('Env: {self.env} Role: {self.role}')
 
     def get_instance_ids(self):
         if self.env is None or self.role is None:
@@ -77,7 +77,7 @@ class Dns(object):
         instances = response['Reservations']
 
         if not self.quiet:
-            print 'Checking tags'
+            print('Checking tags')
         self.instances = {}
         self.indexes = []
         for instance in instances:
@@ -87,7 +87,7 @@ class Dns(object):
                 tags = instance['Instances'][0]['Tags']
                 for tag in tags:
                     if tag['Key'] == self.tag_index:
-                        index = tag['Value']                
+                        index = tag['Value']
                         self.indexes.append(index)
                 self.instances[instance_id] = int(index)
 
@@ -98,12 +98,12 @@ class Dns(object):
         # the current instance will be in the list, but as we want to start at 1, that's good
         self.instance_count = len(self.instances)
         if not self.quiet:
-            print 'Instance count: %d' % (self.instance_count)
+            print(f'Instance count: {self.instance_count}')
 
-        if self.instances.has_key(self.instance_id) and self.instances[self.instance_id] >= 0:
+        if self.instance_id in self.instances and self.instances[self.instance_id] >= 0:
             self.instance_count = self.instances[self.instance_id]
             if not self.quiet:
-                print 'Index is already set %s' % (self.instance_count)
+                print(f'Index is already set {self.instance_count}')
             self.update_dns = False
             self.update_index = False
 
@@ -111,7 +111,7 @@ class Dns(object):
             raise Exception('Instance count must be 1 or more')
 
         if not self.quiet:
-            print self.indexes
+            print(self.indexes)
 
         if self.update_index:
             # May be replacing a previous server
@@ -119,10 +119,10 @@ class Dns(object):
                 if str(i) not in self.indexes:
                     self.instance_count = i
                     break
-    
+
         if not self.quiet:
-            print 'Using index: %d' % (self.instance_count)
-            
+            print(f'Using index: {self.instance_count}')
+
         if self.update_index:
             self.ec2_client.create_tags(
                 Resources=[self.instance_id],
@@ -132,7 +132,7 @@ class Dns(object):
         if self.set_tag_name:
             name = '%s-%s-%d' % (self.env, self.role, self.instance_count)
             if not self.quiet:
-                print 'Setting instance name: %s' % (name)
+                print(f'Setting instance name: {name}')
             self.ec2_client.create_tags(
                 Resources=[self.instance_id],
                 Tags=[{'Key': 'Name', 'Value': name }]
@@ -148,17 +148,17 @@ class Dns(object):
             self.hostname = "%s.%s" % (self.name, self.domain)
 
         if not self.quiet:
-            print 'Hostname: %s' % (self.hostname)
+            print(f'Hostname: {self.hostname}')
         else:
-            print self.hostname
+            print(self.hostname)
 
     def run_update_all(self):
         self.get_instance_ids()
         if not self.quiet:
-            print self.instances
+            print(self.instances)
         for instance_id in self.instances.keys():
             if not self.quiet:
-                print 'Updating instance %s' % (instance_id)
+                print(f'Updating instance {instance_id}')
             self.instance_id = instance_id
             self.run_update_dns()
 
@@ -175,12 +175,12 @@ class Dns(object):
 
         if not self.update_dns and not self.force_dns_registration:
             if not self.quiet:
-                print 'Skipping dns update as server already exists'
+                print('Skipping dns update as server already exists')
             return
 
         if not self.set_dns_registration:
             if not self.quiet:
-                print 'Skipping dns registration as per request'
+                print('Skipping dns registration as per request')
             return
 
         if self.ip is None:
@@ -214,7 +214,7 @@ class Dns(object):
             }
         )
         if not self.quiet:
-            print response
+            print(response)
 
     def main(self):
         parser = argparse.ArgumentParser(description='Update route 53 dns based on server tags')
